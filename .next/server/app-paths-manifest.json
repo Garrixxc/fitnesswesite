@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/events/page": "app/events/page.js",
+  "/page": "app/page.js",
+  "/sport/[sport]/page": "app/sport/[sport]/page.js",
+  "/events/create/page": "app/events/create/page.js",
+  "/training/page": "app/training/page.js",
+  "/clubs/page": "app/clubs/page.js",
+  "/experts/page": "app/experts/page.js"
+}
