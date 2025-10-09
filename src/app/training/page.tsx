@@ -1,16 +1,9 @@
-// src/app/training/page.tsx
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
-function formatINR(n: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+export const revalidate = 60;
 
-export default async function TrainingIndexPage() {
+export default async function TrainingPage() {
   const plans = await prisma.trainingPlan.findMany({
     orderBy: [{ isPremium: "desc" }, { createdAt: "desc" }],
     select: {
@@ -21,130 +14,68 @@ export default async function TrainingIndexPage() {
       level: true,
       weeks: true,
       price: true,
-      compareAtPrice: true, // safe even if you didn’t add the column; remove if skipping schema change
+      compareAt: true,
       isPremium: true,
       coverImage: true,
       description: true,
     },
+    take: 30,
   });
 
   return (
-    <main className="min-h-screen bg-[#0B1224] text-white">
-      <section className="max-w-7xl mx-auto px-6 py-10">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold">Training Plans</h1>
-          <p className="text-white/60 mt-1">plans: {plans.length}</p>
-        </header>
+    <main className="min-h-screen bg-[rgb(var(--brand-surface))]">
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <h1 className="text-3xl font-extrabold text-white">Training plans</h1>
+        <p className="mt-1 text-white/70">Structured plans by sport & level.</p>
 
-        {plans.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-white/70">
-            No plans yet.{" "}
-            <Link href="/training/create" className="underline text-white">
-              Create one
-            </Link>
-            .
-          </div>
-        ) : (
-          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {plans.map((p) => {
-              const isFree = p.price === 0;
-              const showStrike =
-                typeof p.compareAtPrice === "number" &&
-                p.compareAtPrice > p.price &&
-                p.price > 0;
+        <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {plans.map((p) => (
+            <li key={p.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+              <div className="relative h-36 w-full bg-white/[0.03]">
+                {p.coverImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.coverImage} alt={p.title} className="h-full w-full object-cover" />
+                ) : null}
+              </div>
+              <div className="p-4">
+                <div className="flex items-center gap-2 text-xs text-white/70">
+                  <span className="rounded-full border border-white/15 bg-black/50 px-2 py-0.5">{String(p.sport)}</span>
+                  <span className="rounded-full border border-white/15 bg-black/50 px-2 py-0.5">{String(p.level)}</span>
+                  <span className="rounded-full border border-white/15 bg-black/50 px-2 py-0.5">{p.weeks} weeks</span>
+                  {p.isPremium ? <span className="rounded-full bg-primary/20 px-2 py-0.5 text-primary">Premium</span> : null}
+                </div>
+                <h3 className="mt-2 font-semibold text-white">{p.title}</h3>
+                <p className="mt-1 line-clamp-2 text-sm text-white/70">{p.description}</p>
 
-              return (
-                <li key={p.id}>
-                  <Link
-                    href={`/training/${p.slug}`}
-                    className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] hover:bg-white/[0.06] transition"
-                  >
-                    <div className="relative aspect-[16/9] overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={p.coverImage || "/placeholder.jpg"}
-                        alt={p.title}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute left-3 top-3 flex gap-2">
-                        <Badge
-                          variant={isFree ? "success" : p.isPremium ? "premium" : "neutral"}
-                        >
-                          {isFree ? "Free" : p.isPremium ? "Premium" : "Standard"}
-                        </Badge>
-                        <Badge variant="ghost">
-                          {p.sport} · {p.level} · {p.weeks} wk
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="p-4">
-                      <h3 className="font-semibold line-clamp-2">{p.title}</h3>
-
-                      {p.description ? (
-                        <p className="mt-1 text-sm text-white/60 line-clamp-2">
-                          {p.description}
-                        </p>
-                      ) : null}
-
-                      {/* Price row */}
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="text-sm text-white/70">
-                          {isFree ? (
-                            <span className="text-white font-medium">Free</span>
-                          ) : (
-                            <div className="flex items-baseline gap-2">
-                              {showStrike && (
-                                <span className="line-through text-white/40">
-                                  {formatINR(p.compareAtPrice as number)}
-                                </span>
-                              )}
-                              <span className="text-white font-semibold">
-                                {formatINR(p.price)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        <span className="text-sm text-[#8EA0FF] group-hover:underline">
-                          View plan →
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="text-white">
+                    {p.compareAt ? (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-white/60 line-through">
+                          ₹{new Intl.NumberFormat("en-IN").format(p.compareAt)}
+                        </span>
+                        <span className="text-lg font-bold">
+                          ₹{new Intl.NumberFormat("en-IN").format(p.price)}
                         </span>
                       </div>
-                    </div>
+                    ) : (
+                      <span className="text-lg font-bold">
+                        {p.price > 0 ? `₹${new Intl.NumberFormat("en-IN").format(p.price)}` : "Free"}
+                      </span>
+                    )}
+                  </div>
+                  <Link
+                    href={`/training/${p.slug}`}
+                    className="rounded-md border border-white/10 bg-white/[0.06] px-3 py-1.5 text-white/90 hover:bg-white/[0.12]"
+                  >
+                    View
                   </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     </main>
-  );
-}
-
-/* ---------------- UI bits ---------------- */
-
-function Badge({
-  children,
-  variant = "neutral",
-}: {
-  children: React.ReactNode;
-  variant?: "neutral" | "ghost" | "premium" | "success";
-}) {
-  const styles = {
-    neutral:
-      "bg-black/50 text-white/90 border border-white/10",
-    ghost:
-      "bg-black/30 text-white/80 border border-white/10",
-    premium:
-      "bg-[#3A2FFF]/70 text-white border border-white/10",
-    success:
-      "bg-emerald-500/80 text-black border border-emerald-400/40",
-  }[variant];
-
-  return (
-    <span className={`px-2 py-1 text-xs rounded-full backdrop-blur ${styles}`}>
-      {children}
-    </span>
   );
 }

@@ -1,8 +1,11 @@
 // prisma/seed.ts
-import { PrismaClient, Sport, Level } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { mkdir } from "fs/promises";
+
 const prisma = new PrismaClient();
 
-/* ---------- helpers ---------- */
+type Sport = Prisma.Sport;
+type Level = Prisma.Level;
 
 async function upsertTrainingPlan(input: {
   slug: string;
@@ -11,17 +14,12 @@ async function upsertTrainingPlan(input: {
   level: Level;
   weeks: number;
   price: number;
+  compareAt?: number | null;
   isPremium?: boolean;
   coverImage?: string | null;
   description: string;
-  workouts: Array<{
-    week: number;
-    dayOfWeek: number; // 1=Mon ... 7=Sun
-    title: string;
-    details: string;
-  }>;
 }) {
-  const plan = await prisma.trainingPlan.upsert({
+  await prisma.trainingPlan.upsert({
     where: { slug: input.slug },
     update: {
       title: input.title,
@@ -29,6 +27,7 @@ async function upsertTrainingPlan(input: {
       level: input.level,
       weeks: input.weeks,
       price: input.price,
+      compareAt: input.compareAt ?? null,
       isPremium: input.isPremium ?? false,
       coverImage: input.coverImage ?? null,
       description: input.description,
@@ -40,43 +39,31 @@ async function upsertTrainingPlan(input: {
       level: input.level,
       weeks: input.weeks,
       price: input.price,
+      compareAt: input.compareAt ?? null,
       isPremium: input.isPremium ?? false,
       coverImage: input.coverImage ?? null,
       description: input.description,
     },
   });
-
-  await prisma.workout.deleteMany({ where: { trainingPlanId: plan.id } });
-  await prisma.workout.createMany({
-    data: input.workouts.map((w) => ({
-      trainingPlanId: plan.id,
-      week: w.week,
-      dayOfWeek: w.dayOfWeek,
-      title: w.title,
-      details: w.details,
-    })),
-  });
-
-  return plan;
 }
 
 async function upsertClub(input: {
   slug: string;
   name: string;
-  city?: string | null;
+  city: string;
   sports: Sport[];
-  memberCount: number;
+  members?: number | null;
   description?: string | null;
   logoUrl?: string | null;
   coverImage?: string | null;
 }) {
-  return prisma.club.upsert({
+  await prisma.club.upsert({
     where: { slug: input.slug },
     update: {
       name: input.name,
-      city: input.city ?? null,
+      city: input.city,
       sports: input.sports,
-      memberCount: input.memberCount,
+      members: input.members ?? null,
       description: input.description ?? null,
       logoUrl: input.logoUrl ?? null,
       coverImage: input.coverImage ?? null,
@@ -84,9 +71,9 @@ async function upsertClub(input: {
     create: {
       slug: input.slug,
       name: input.name,
-      city: input.city ?? null,
+      city: input.city,
       sports: input.sports,
-      memberCount: input.memberCount,
+      members: input.members ?? null,
       description: input.description ?? null,
       logoUrl: input.logoUrl ?? null,
       coverImage: input.coverImage ?? null,
@@ -94,31 +81,11 @@ async function upsertClub(input: {
   });
 }
 
-async function upsertExpert(input: {
-  slug: string;
-  name: string;
-  role: "COACH" | "PHYSIO" | "NUTRITION";
-  sports: Sport[];
-  city?: string | null;
-  bio?: string | null;
-  certifications?: string | null;
-  monthlyRate?: number | null;
-  hourlyRate?: number | null;
-  rating?: number | null;
-  photoUrl?: string | null;
-  yearsExp?: number | null;
-}) {
-  return prisma.expert.upsert({
-    where: { slug: input.slug },
-    update: input,
-    create: input,
-  });
-}
-
-/* ---------- seed ---------- */
-
 async function main() {
-  // ---- Training Plans (same as yours) ----
+  console.log("DATABASE_URL =", process.env.DATABASE_URL); // <- sanity check
+  await mkdir("public/uploads", { recursive: true });
+
+  // Plans
   await upsertTrainingPlan({
     slug: "5k-beginner-8w",
     title: "5K Beginner — 8 Weeks",
@@ -126,14 +93,9 @@ async function main() {
     level: "BEGINNER",
     weeks: 8,
     price: 0,
+    isPremium: false,
     coverImage: "/uploads/cat-running.jpg",
-    description:
-      "Gentle introduction to running with walk/run intervals, building to a confident 5K.",
-    workouts: [
-      { week: 1, dayOfWeek: 2, title: "Easy Walk/Run", details: "20 min easy: 1 min jog / 2 min walk x 6" },
-      { week: 1, dayOfWeek: 4, title: "Cross Train", details: "30 min bike or swim" },
-      { week: 1, dayOfWeek: 6, title: "Long Easy", details: "30 min easy continuous jog" },
-    ],
+    description: "Gentle intro to running; build to a confident 5K.",
   });
 
   await upsertTrainingPlan({
@@ -143,100 +105,72 @@ async function main() {
     level: "BEGINNER",
     weeks: 6,
     price: 0,
+    isPremium: false,
     coverImage: "/uploads/cat-cycling.jpg",
-    description:
-      "Foundational endurance and cadence drills to build aerobic base.",
-    workouts: [
-      { week: 1, dayOfWeek: 2, title: "Endurance Ride", details: "45 min Z2 steady" },
-      { week: 1, dayOfWeek: 4, title: "Cadence Drills", details: "5 x 3 min high cadence" },
-      { week: 1, dayOfWeek: 6, title: "Long Endurance", details: "75 min Z2" },
-    ],
+    description: "Endurance and cadence drills to build aerobic base.",
   });
 
-  // ---- Clubs (same as yours) ----
-  await upsertClub({
-    slug: "mumbai-morning-milers",
-    name: "Mumbai Morning Milers",
-    city: "Mumbai",
-    sports: ["RUN"],
-    memberCount: 420,
-    description: "Community runs at Marine Drive, Tues/Thu/Sun. All paces welcome.",
-    logoUrl: "/uploads/cat-running.jpg",
-    coverImage: "/uploads/hero.jpg",
-  });
+  // Clubs
+  await Promise.all([
+    upsertClub({
+      slug: "mumbai-morning-milers",
+      name: "Mumbai Morning Milers",
+      city: "Mumbai",
+      sports: ["RUN"],
+      members: 420,
+      description: "Community runs at Marine Drive, Tue/Thu/Sun.",
+      logoUrl: "/uploads/cat-running.jpg",
+      coverImage: "/uploads/hero.jpg",
+    }),
+    upsertClub({
+      slug: "blr-crit-crew",
+      name: "BLR Crit Crew",
+      city: "Bengaluru",
+      sports: ["CYCLING"],
+      members: 260,
+      description: "Weeknight crit practice and weekend endurance rides.",
+      logoUrl: "/uploads/cat-cycling.jpg",
+      coverImage: "/uploads/tri.jpg",
+    }),
+    upsertClub({
+      slug: "pune-trail-pack",
+      name: "Pune Trail Pack",
+      city: "Pune",
+      sports: ["RUN", "TREK"],
+      members: 180,
+      description: "Early morning trail runs and monthly treks in the ghats.",
+      logoUrl: "/uploads/placeholder-logo.png",
+      coverImage: "/uploads/placeholder.jpg",
+    }),
+    upsertClub({
+      slug: "chennai-enduro",
+      name: "Chennai Enduro",
+      city: "Chennai",
+      sports: ["CYCLING"],
+      members: 150,
+      description: "Coastal endurance rides and FTP build blocks.",
+      logoUrl: "/uploads/placeholder-logo.png",
+      coverImage: "/uploads/placeholder.jpg",
+    }),
+    upsertClub({
+      slug: "goa-open-water",
+      name: "Goa Open Water",
+      city: "Goa",
+      sports: ["SWIM"],
+      members: 95,
+      description: "Weekly ocean swims, technique + safety briefings.",
+      logoUrl: "/uploads/placeholder-logo.png",
+      coverImage: "/uploads/placeholder.jpg",
+    }),
+  ]);
 
-  await upsertClub({
-    slug: "blr-crit-crew",
-    name: "BLR Crit Crew",
-    city: "Bengaluru",
-    sports: ["CYCLING"],
-    memberCount: 260,
-    description: "Weeknight crit practice and weekend endurance rides.",
-    logoUrl: "/uploads/cat-cycling.jpg",
-    coverImage: "/uploads/tri.jpg",
-  });
-
-  // ---- Experts ----
-  await upsertExpert({
-    slug: "aisha-kapoor-run-coach",
-    name: "Aisha Kapoor",
-    role: "COACH",
-    sports: ["RUN"],
-    city: "Mumbai",
-    bio: "RRCA-certified coach, beginners to half-marathon PRs.",
-    certifications: "RRCA L1, NASM-CPT",
-    monthlyRate: 2999,
-    rating: 4.8,
-    photoUrl: "/uploads/cat-running.jpg",
-    yearsExp: 7,
-  });
-
-  await upsertExpert({
-    slug: "rahul-menon-cycling-coach",
-    name: "Rahul Menon",
-    role: "COACH",
-    sports: ["CYCLING"],
-    city: "Bengaluru",
-    bio: "FTP development and race tactics.",
-    certifications: "UEC L1",
-    monthlyRate: 3499,
-    rating: 4.7,
-    photoUrl: "/uploads/cat-cycling.jpg",
-    yearsExp: 9,
-  });
-
-  await upsertExpert({
-    slug: "meera-shah-physio",
-    name: "Meera Shah",
-    role: "PHYSIO",
-    sports: ["RUN", "CYCLING"],
-    city: "Pune",
-    bio: "Sports physio: knee tracking, ITB, return-to-run.",
-    certifications: "MPT (Sports), COMT",
-    hourlyRate: 1200,
-    rating: 4.9,
-    photoUrl: "/uploads/physio.jpg",
-  });
-
-  await upsertExpert({
-    slug: "arjun-iyer-nutrition",
-    name: "Arjun Iyer",
-    role: "NUTRITION",
-    sports: ["RUN", "CYCLING", "TRIATHLON"],
-    city: "Chennai",
-    bio: "Endurance fueling and weight management for athletes.",
-    certifications: "CNS, PN L1",
-    hourlyRate: 900,
-    rating: 4.6,
-    photoUrl: "/uploads/nutrition.jpg",
-  });
-
-  console.log("✅ Seed complete");
+  const count = await prisma.club.count();
+  console.log(`✅ Seed complete. Clubs in DB: ${count}`);
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

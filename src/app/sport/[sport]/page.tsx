@@ -1,449 +1,413 @@
-// src/app/sport/[sport]/page.tsx
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
-import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 
-/* ---------- Supported sports & mapping ---------- */
+export const revalidate = 60;
 
-const SUPPORTED = [
-  "running",
-  "cycling",
-  "swimming",
-  "triathlon",
-  "cricket",
-  "football",
-  "yoga",
-  "calisthenics",
-  "pickleball",
-] as const;
-
-type SupportedSport = (typeof SUPPORTED)[number];
-
-// Map URL slugs to Prisma enum values (fallback to OTHER where needed)
-const SPORT_MAP: Record<
-  SupportedSport,
-  "RUN" | "CYCLING" | "SWIM" | "TRIATHLON" | "OTHER"
-> = {
+/* ---------- slug → enum mapping ---------- */
+const SPORT_SLUGS = {
   running: "RUN",
   cycling: "CYCLING",
+  swim: "SWIM",
   swimming: "SWIM",
   triathlon: "TRIATHLON",
-  cricket: "OTHER",
-  football: "OTHER",
-  yoga: "OTHER",
-  calisthenics: "OTHER",
-  pickleball: "OTHER",
-};
+  trek: "TREK",
+  other: "OTHER",
+} as const;
+type SportEnum = typeof SPORT_SLUGS[keyof typeof SPORT_SLUGS];
 
-const TABS = [
-  { key: "events", label: "Events" },
-  { key: "training", label: "Training Plans" },
-  { key: "coaches", label: "Coaches" },
-  { key: "clubs", label: "Clubs" },
-  { key: "blogs", label: "Blogs" },
-  { key: "care", label: "Physio/Nutrition" },
-] as const;
-
-/* ---------- Metadata ---------- */
-
-export async function generateMetadata({
-  params,
-  searchParams,
-}: {
-  params: { sport: string };
-  searchParams: { tab?: string };
-}): Promise<Metadata> {
-  const s = params.sport?.toLowerCase();
-  if (!SUPPORTED.includes(s as SupportedSport)) return {};
-  const tab = TABS.find((t) => t.key === (searchParams.tab ?? "events"))?.label ?? "Events";
-  return {
-    title: `${capitalize(s!)} — ${tab} | FitnessHub`,
-    description: `Discover ${capitalize(s!)} events and training plans.`,
-  };
+function sportLabel(s: SportEnum) {
+  switch (s) {
+    case "RUN": return "Running";
+    case "CYCLING": return "Cycling";
+    case "SWIM": return "Swimming";
+    case "TRIATHLON": return "Triathlon";
+    case "TREK": return "Trek";
+    default: return "Other";
+  }
 }
 
-/* ---------- Page ---------- */
-
-export default async function SportPage({
+/* ---------- page ---------- */
+export default async function SportHub({
   params,
-  searchParams,
-}: {
-  params: { sport: string };
-  searchParams: { tab?: string };
-}) {
-  const sportParam = params.sport?.toLowerCase();
-  if (!SUPPORTED.includes(sportParam as SupportedSport)) notFound();
+}: { params: { sport?: string } }) {
+  const slug = (params.sport ?? "").toLowerCase();
+  const sport = SPORT_SLUGS[slug] as SportEnum | undefined;
+  if (!sport) notFound();
 
-  const activeTab = (searchParams.tab ?? "events").toLowerCase();
-  const sportEnum = SPORT_MAP[sportParam as SupportedSport];
+  const now = new Date();
 
-  // Fetch everything needed for this sport (now includes careExperts)
-  const [events, plans, coaches, clubs, careExperts] = await Promise.all([
+  /* Parallel queries for sport hub */
+  const [events, plans, clubs, experts] = await Promise.all([
     prisma.event.findMany({
-      where: { sport: sportEnum },
+      where: { sport: sport as any, startDate: { gte: now } },
       orderBy: { startDate: "asc" },
-      take: 12,
+      take: 8,
+      select: {
+        id: true, slug: true, title: true, coverImage: true,
+        startDate: true, endDate: true, location: true,
+        price: true, currency: true, sport: true,
+      },
     }),
     prisma.trainingPlan.findMany({
-      where: { sport: sportEnum },
-      orderBy: { level: "asc" },
-      take: 12,
-    }),
-    prisma.coach.findMany({
-      where: { sports: { has: sportEnum } }, // Coach.sports is Sport[]
-      orderBy: { rating: "desc" },
-      take: 12,
+      where: { sport: sport as any },
+      orderBy: [{ isPremium: "desc" }, { createdAt: "desc" }],
+      take: 6,
+      select: {
+        id: true, slug: true, title: true, level: true, weeks: true,
+        price: true, compareAt: true, isPremium: true, coverImage: true,
+        description: true,
+      },
     }),
     prisma.club.findMany({
-      where: { sports: { has: sportEnum } }, // Club.sports is Sport[]
-      orderBy: { memberCount: "desc" },
-      take: 12,
+      where: { sports: { has: sport as any } },
+      orderBy: [{ members: "desc" }, { name: "asc" }],
+      take: 8,
+      select: {
+        slug: true, name: true, city: true, sports: true,
+        members: true, description: true, logoUrl: true, coverImage: true,
+      },
     }),
     prisma.expert.findMany({
-      where: {
-        sports: { has: sportEnum },
-        role: { in: ["PHYSIO", "NUTRITION"] },
+      where: { sports: { has: sport as any } },
+      orderBy: [{ rating: "desc" }],
+      take: 6,
+      select: {
+        slug: true, name: true, role: true, city: true,
+        sports: true, rating: true, rate: true,
       },
-      orderBy: [{ rating: "desc" }, { createdAt: "desc" }],
-      take: 12,
     }),
   ]);
 
+  const label = sportLabel(sport);
+
   return (
-    <main className="min-h-screen bg-[rgb(var(--brand-surface))]">
-      <section className="mx-auto max-w-7xl px-4 pt-6">
-        {/* Back link + breadcrumb */}
-        <div className="mb-4 flex items-center justify-between">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-white/75 hover:text-white"
-          >
-            <span aria-hidden>←</span>
-            Back to Home
-          </Link>
-
-          <nav aria-label="Breadcrumb" className="hidden text-sm text-white/60 md:block">
-            <Link href="/" className="hover:text-white">
-              Home
-            </Link>{" "}
-            / <span className="text-white/80">{capitalize(sportParam!)}</span>
-          </nav>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 pb-10 md:pb-14">
-        {/* Hero */}
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.03] p-8 md:p-12 shadow-[0_10px_50px_-15px_rgba(0,0,0,0.6)]">
-          <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 backdrop-blur">
-            {capitalize(sportParam!)} hub
-          </span>
-          <h1 className="mt-4 text-4xl/tight font-extrabold text-white md:text-6xl/tight">
-            Everything {capitalize(sportParam!)} — curated for you
-          </h1>
-          <p className="mt-4 max-w-2xl text-white/70">
-            Explore upcoming events, structured training plans, and expert resources tailored to{" "}
-            {sportParam}.
-          </p>
-          <div className="pointer-events-none absolute -right-6 -top-6 h-48 w-48 rounded-full bg-primary/20 blur-3xl" />
-        </div>
-
-        {/* Tabs (use replace so Back goes home, not previous tab) */}
-        <nav className="mt-8 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 p-2">
-          {TABS.map((t) => {
-            const isActive = t.key === activeTab;
-            return (
-              <Link
-                key={t.key}
-                href={`/sport/${sportParam}?tab=${t.key}`}
-                replace
-                className={[
-                  "whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition",
-                  isActive
-                    ? "bg-primary/20 text-white shadow-inner"
-                    : "text-white/70 hover:text-white hover:bg-white/10",
-                ].join(" ")}
-              >
-                {t.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Panels */}
-        <div className="mt-6">
-          {activeTab === "events" && (
-            <SectionGrid
-              title="Upcoming Events"
-              subtitle={`Races & rides for ${sportParam}`}
-              items={events.map((e) => ({
-                id: e.id,
-                title: e.title,
-                href: `/events/${e.slug}`,
-                meta: formatDateRange(e.startDate, e.endDate ?? undefined),
-                chip: e.location,
-                image: e.coverImage ?? "/placeholder.jpg",
-              }))}
-              emptyText={`No ${sportParam} events yet.`}
-              emptyCta={`/events?sport=${sportParam}`}
-            />
-          )}
-
-          {activeTab === "training" && (
-            <SectionGrid
-              title="Training Plans"
-              subtitle="From base-building to race-ready"
-              items={plans.map((p) => ({
-                id: p.id,
-                title: p.title,
-                href: `/training/${p.slug}`,
-                meta: `${capitalize(p.level.toLowerCase())} · ${p.weeks} weeks`,
-                chip: sportParam,
-                image: p.coverImage ?? "/placeholder.jpg",
-              }))}
-              emptyText="No plans yet."
-              emptyCta={`/training?sport=${sportParam}`}
-            />
-          )}
-
-          {activeTab === "coaches" && (
-            <SectionGrid
-              title="Coaches"
-              subtitle="1:1 guidance from certified experts"
-              items={coaches.map((c) => ({
-                id: c.id,
-                title: c.name,
-                href: `/experts/${c.slug}`, // change to "#" if detail page not ready
-                meta: `${c.city ?? "—"} • ${c.yearsExp} yrs • ₹${c.monthlyRate}/mo${
-                  c.rating ? ` • ★ ${c.rating.toFixed(1)}` : ""
-                }`,
-                chip: sportParam,
-                image: c.photoUrl ?? "/placeholder.jpg",
-              }))}
-              emptyText="No coaches yet for this sport."
-              emptyCta={`/experts?sport=${sportParam}`}
-            />
-          )}
-
-          {activeTab === "clubs" && (
-            <SectionGrid
-              title="Clubs"
-              subtitle="Find your training crew"
-              items={clubs.map((cl) => ({
-                id: cl.id,
-                title: cl.name,
-                href: `/clubs/${cl.slug}`, // change to "#" if detail page not ready
-                meta: `${cl.city ?? "—"} • ${cl.memberCount} members`,
-                chip: sportParam,
-                image: cl.coverImage ?? cl.logoUrl ?? "/placeholder.jpg",
-              }))}
-              emptyText="No clubs listed yet."
-              emptyCta={`/clubs?sport=${sportParam}`}
-            />
-          )}
-
-          {activeTab === "blogs" && (
-            <EmptyPanel
-              title="Blogs & Guides"
-              text="We’ll surface technique, gear, nutrition and more here."
-              ctaHref="/blog"
-            />
-          )}
-
-          {activeTab === "care" && (
-            <section className="mt-6">
-              <h2 className="text-2xl font-bold text-white">Physio & Nutrition</h2>
-
-              {careExperts.length === 0 ? (
-                <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-white/70">
-                  Coming soon for {sportParam}.
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {careExperts.map((e) => (
-                    <Link
-                      key={e.id}
-                      href={`/experts/${e.slug}`}
-                      className="group overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition"
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={e.photoUrl ?? "/placeholder.jpg"}
-                          alt={e.name}
-                          className="h-12 w-12 rounded-full object-cover"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-white truncate">{e.name}</p>
-                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/80">
-                              {e.role === "PHYSIO"
-                                ? "Physio"
-                                : e.role === "NUTRITIONIST"
-                                ? "Nutrition"
-                                : "Coach"}
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60">
-                            {e.city ?? "—"} {e.rating ? `• ★ ${e.rating.toFixed(1)}` : ""}
-                            {e.consultRate ? ` • ₹${e.consultRate}/session` : ""}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {e.sports.map((s) => (
-                          <span
-                            key={s}
-                            className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] text-white/70"
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-4">
-                <Link
-                  href={`/experts?role=physio&sport=${sportParam}`}
-                  className="text-sm text-white/70 hover:text-white"
-                >
-                  Browse all physios →
-                </Link>
-                <span className="px-2 text-white/20">•</span>
-                <Link
-                  href={`/experts?role=nutritionist&sport=${sportParam}`}
-                  className="text-sm text-white/70 hover:text-white"
-                >
-                  Browse all nutritionists →
-                </Link>
+    <main className="min-h-screen bg-[rgb(var(--brand-surface))] text-white">
+      {/* Hero */}
+      <section className="relative border-b border-white/10">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(900px_500px_at_-10%_-10%,rgba(99,91,255,.25),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(51,230,166,.18),transparent_60%)]" />
+        <div className="mx-auto max-w-7xl px-6 py-10">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80">
+                Sport
+              </span>
+              <h1 className="mt-3 text-3xl font-extrabold md:text-5xl">
+                {label} hub
+              </h1>
+              <p className="mt-2 max-w-2xl text-white/70">
+                Upcoming {label.toLowerCase()} events, popular clubs, coach marketplace,
+                and training plans — all in one place.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a href="#events" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Events</a>
+                <a href="#training" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Training</a>
+                <a href="#clubs" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Clubs</a>
+                <a href="#experts" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Experts</a>
               </div>
-            </section>
-          )}
+            </div>
+            <Link
+              href="/events/create"
+              className="hidden rounded-xl bg-primary px-4 py-2 text-sm font-semibold hover:opacity-90 md:block"
+            >
+              + Create {label} event
+            </Link>
+          </div>
         </div>
       </section>
+
+      {/* Sections */}
+      <div className="mx-auto max-w-7xl px-6">
+        {/* Events */}
+        <SectionHeader id="events" title={`Upcoming ${label} events`} href="/events" cta="Browse all events" />
+        {events.length ? (
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {events.map((e) => (
+              <li key={e.id}><EventCard e={e} /></li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyCard
+            title="No events yet"
+            subtitle={`Add your first ${label.toLowerCase()} event or check back soon.`}
+            primaryHref="/events/create"
+            primary={`Create ${label} event`}
+            secondaryHref="/events"
+            secondary="Browse events"
+          />
+        )}
+
+        {/* Training */}
+        <SectionHeader id="training" title={`${label} training plans`} href="/training" cta="All plans" className="mt-12" />
+        {plans.length ? (
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.map((p) => (
+              <li key={p.id}><PlanCard p={p} /></li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyCard
+            title="No plans yet"
+            subtitle={`We don’t have ${label.toLowerCase()} plans here yet.`}
+            secondaryHref="/training"
+            secondary="Explore training"
+          />
+        )}
+
+        {/* Clubs */}
+        <SectionHeader id="clubs" title={`${label} clubs & groups`} href="/clubs" cta="All clubs" className="mt-12" />
+        {clubs.length ? (
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {clubs.map((c) => (
+              <li key={c.slug}><ClubCard c={c} /></li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyCard
+            title="No clubs yet"
+            subtitle={`We couldn’t find ${label.toLowerCase()} clubs.`}
+            secondaryHref="/clubs"
+            secondary="Browse clubs"
+          />
+        )}
+
+        {/* Experts */}
+        <SectionHeader id="experts" title={`${label} coaches & experts`} href="/experts" cta="All experts" className="mt-12" />
+        {experts.length ? (
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {experts.map((x) => (
+              <li key={x.slug}><ExpertCard x={x} /></li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyCard
+            title="No experts yet"
+            subtitle={`Hire coaches, physios and nutritionists for ${label.toLowerCase()}.`}
+            secondaryHref="/experts"
+            secondary="Browse experts"
+          />
+        )}
+
+        <div className="h-16" />
+      </div>
     </main>
   );
 }
 
-/* ---------- Reusable UI ---------- */
+/* ---------- reusable bits (local to this page) ---------- */
 
-function SectionGrid({
-  title,
-  subtitle,
-  items,
-  emptyText,
-  emptyCta,
-}: {
-  title: string;
-  subtitle?: string;
-  items: Array<{
-    id: string;
-    title: string;
-    href: string;
-    meta?: string;
-    chip?: string | null;
-    image?: string | null;
-  }>;
-  emptyText: string;
-  emptyCta: string;
-}) {
+function SectionHeader({
+  id, title, href, cta, className = "",
+}: { id: string; title: string; href: string; cta: string; className?: string }) {
   return (
-    <section className="mt-6">
-      <header className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-white">{title}</h2>
-          {subtitle && <p className="text-sm text-white/60">{subtitle}</p>}
-        </div>
-        <Link
-          href={emptyCta}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80 hover:bg-white/10"
-        >
-          View all →
-        </Link>
-      </header>
-
-      {items.length === 0 ? (
-        <EmptyState text={emptyText} />
-      ) : (
-        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((it) => (
-            <li key={it.id}>
-              <Link
-                href={it.href}
-                className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)]"
-              >
-                <div className="relative aspect-[16/9] overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt={it.title}
-                    src={it.image ?? "/placeholder.jpg"}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  {it.chip ? (
-                    <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2 py-1 text-xs text-white/90 backdrop-blur">
-                      {it.chip}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="p-4">
-                  <h3 className="line-clamp-2 font-semibold text-white">{it.title}</h3>
-                  {it.meta && <p className="mt-1 text-sm text-white/60">{it.meta}</p>}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center text-white/70">
-      {text}
+    <div id={id} className={`mb-4 mt-10 flex items-center justify-between ${className}`}>
+      <h2 className="text-xl font-bold">{title}</h2>
+      <Link href={href} className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/85 hover:bg-white/10">
+        {cta} →
+      </Link>
     </div>
   );
 }
 
-function EmptyPanel({ title, text, ctaHref }: { title: string; text: string; ctaHref: string }) {
+function EmptyCard({
+  title, subtitle, primaryHref, primary, secondaryHref, secondary,
+}: {
+  title: string; subtitle?: string;
+  primaryHref?: string; primary?: string;
+  secondaryHref?: string; secondary?: string;
+}) {
   return (
-    <section className="mt-6">
-      <h2 className="text-2xl font-bold text-white">{title}</h2>
-      <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
-        <p>{text}</p>
-        <Link
-          href={ctaHref}
-          className="mt-4 inline-block rounded-xl bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
-        >
-          Explore →
-        </Link>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-10 text-center">
+      <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-white/10" />
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {subtitle && <p className="mt-1 text-sm text-white/70">{subtitle}</p>}
+      <div className="mt-4 flex items-center justify-center gap-2">
+        {primaryHref && primary && (
+          <Link href={primaryHref} className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold hover:opacity-90">
+            {primary}
+          </Link>
+        )}
+        {secondaryHref && secondary && (
+          <Link href={secondaryHref} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">
+            {secondary}
+          </Link>
+        )}
       </div>
-    </section>
+    </div>
   );
 }
 
-/* ---------- utils ---------- */
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+/* Event card */
+function EventCard({ e }: {
+  e: {
+    slug: string; title: string; coverImage?: string | null;
+    startDate: Date; endDate?: Date | null; location?: string | null;
+    price: number; currency: string; sport: string;
+  }
+}) {
+  const img = e.coverImage && e.coverImage.trim() !== "" ? e.coverImage : "/placeholder.jpg";
+  const date = formatDateRange(e.startDate, e.endDate ?? undefined);
+  return (
+    <Link
+      href={`/events/${e.slug}`}
+      className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_15px_50px_-20px_rgba(0,0,0,0.6)] transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
+    >
+      <div className="relative aspect-[16/10]">
+        <Image src={img} alt={e.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+        <div className="absolute left-3 top-3 flex gap-2">
+          <Chip>{e.location ?? "TBA"}</Chip>
+          <Chip>{e.sport}</Chip>
+        </div>
+        <div className="absolute bottom-3 right-3">
+          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-ink shadow">
+            {e.currency} {formatMoney(e.price)}
+          </span>
+        </div>
+      </div>
+      <div className="p-4">
+        <h3 className="line-clamp-2 font-semibold">{e.title}</h3>
+        <p className="mt-1 text-sm text-white/70">{date}</p>
+      </div>
+    </Link>
+  );
+}
+
+/* Plan card */
+function PlanCard({ p }: {
+  p: {
+    slug: string; title: string; level: string; weeks: number;
+    price: number; compareAt?: number | null; isPremium: boolean;
+    coverImage?: string | null; description?: string | null;
+  }
+}) {
+  const img = p.coverImage && p.coverImage.trim() !== "" ? p.coverImage : "/placeholder.jpg";
+  return (
+    <Link
+      href={`/training/${p.slug}`}
+      className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
+    >
+      <div className="relative aspect-[16/10]">
+        <Image src={img} alt={p.title} fill className="object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
+        <div className="absolute left-3 top-3 flex gap-2">
+          <Chip>{p.level}</Chip>
+          <Chip>{p.weeks}w</Chip>
+          {p.isPremium && <Chip>Premium</Chip>}
+        </div>
+        <div className="absolute bottom-3 right-3">
+          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-ink">
+            ₹ {formatMoney(p.price)}
+          </span>
+        </div>
+      </div>
+      <div className="p-4">
+        <h3 className="line-clamp-2 font-semibold">{p.title}</h3>
+        <p className="mt-1 line-clamp-2 text-sm text-white/70">
+          {p.description ?? "—"}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+/* Club card */
+function ClubCard({ c }: {
+  c: {
+    slug: string; name: string; city?: string | null; sports: string[];
+    members?: number | null; description?: string | null;
+    logoUrl?: string | null; coverImage?: string | null;
+  }
+}) {
+  const img = c.coverImage && c.coverImage.trim() !== "" ? c.coverImage : "/placeholder.jpg";
+  return (
+    <Link
+      href={`/clubs/${c.slug}`}
+      className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
+    >
+      <div className="relative aspect-[16/9]">
+        <Image src={img} alt={c.name} fill className="object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+        <div className="absolute left-3 top-3 flex gap-2">
+          {c.city && <Chip>{c.city}</Chip>}
+          {c.sports?.slice(0, 2).map((s) => <Chip key={s}>{s}</Chip>)}
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="line-clamp-1 font-semibold">{c.name}</h3>
+          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-ink">
+            {c.members ?? 0}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-sm text-white/70">{c.description ?? "—"}</p>
+      </div>
+    </Link>
+  );
+}
+
+/* Expert card */
+function ExpertCard({ x }: {
+  x: {
+    slug: string; name: string; role: string; city?: string | null;
+    sports: string[]; rating?: number | null; rate?: number | null;
+  }
+}) {
+  return (
+    <Link
+      href={`/experts/${x.slug}`}
+      className="group block rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{x.name}</h3>
+          <p className="text-sm text-white/70">
+            {x.role} {x.city ? `• ${x.city}` : ""}
+          </p>
+        </div>
+        {typeof x.rating === "number" && (
+          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-ink">
+            ★ {x.rating.toFixed(1)}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {x.sports.slice(0, 3).map((s) => <Chip key={s}>{s}</Chip>)}
+      </div>
+      {typeof x.rate === "number" && (
+        <div className="mt-3 text-sm text-white/80">from ₹ {formatMoney(x.rate)}</div>
+      )}
+      <span className="mt-2 inline-block text-sm text-primary/90 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        View profile →
+      </span>
+    </Link>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-white/15 bg-black/50 px-2 py-0.5 text-xs text-white/85 backdrop-blur">
+      {children}
+    </span>
+  );
+}
+
+/* utils */
+function formatMoney(n: number) {
+  try {
+    return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
+  } catch { return String(n); }
 }
 function formatDate(d: Date) {
-  return new Date(d).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 function formatDateRange(start: Date, end?: Date) {
-  if (!start) return "";
   if (!end) return formatDate(start);
-  const s = new Date(start),
-    e = new Date(end);
+  const s = new Date(start), e = new Date(end);
   const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
-  if (sameMonth)
+  if (sameMonth) {
     return `${s.toLocaleString(undefined, { month: "short" })} ${s.getDate()}–${e.getDate()}, ${e.getFullYear()}`;
+  }
   return `${formatDate(s)} – ${formatDate(e)}`;
 }

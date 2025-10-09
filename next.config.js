@@ -1,10 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    // allow Google images short links + your Supabase storage host
     remotePatterns: [
-      { protocol: "https", hostname: "images.app.goo.gl" },
-      { protocol: "https", hostname: "*.supabase.co" }, // covers your storage CDN
+      {
+        protocol: "https",
+        hostname: "images.app.goo.gl",
+      },
+      {
+        protocol: "https",
+        hostname: "*.supabase.co", // Supabase storage
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com", // Google OAuth avatars
+      },
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com", // (Optional: GitHub avatars)
+      },
     ],
   },
 };

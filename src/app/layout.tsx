@@ -1,6 +1,8 @@
+// src/app/layout.tsx
 import "@/styles/globals.css";
 import type { Metadata } from "next";
 import Link from "next/link";
+import HeaderUser from "./_components/HeaderUser"; // <- server component that reads the session
 
 export const metadata: Metadata = {
   title: "FitnessHub",
@@ -14,18 +16,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Header */}
         <header className="border-b border-white/10 bg-[rgb(9,15,25)]/70 backdrop-blur supports-[backdrop-filter]:bg-[rgb(9,15,25)]/60">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            {/* Logo goes Home */}
+            {/* Left: logo */}
             <Link href="/" className="inline-flex items-center gap-2">
-              {/* Simple text or swap for an <Image> logo */}
               <span className="text-lg font-extrabold tracking-tight">FitnessHub</span>
             </Link>
 
+            {/* Center: main nav (md+) */}
             <nav className="hidden items-center gap-6 md:flex">
-              <Link href="/events" className="text-sm text-white/80 hover:text-white">Events</Link>
-              <Link href="/training" className="text-sm text-white/80 hover:text-white">Training</Link>
-              <Link href="/experts" className="text-sm text-white/80 hover:text-white">Experts</Link>
-              <Link href="/clubs" className="text-sm text-white/80 hover:text-white">Clubs</Link>
+              <Link href="/events" className="text-sm text-white/80 hover:text-white">
+                Events
+              </Link>
+              <Link href="/training" className="text-sm text-white/80 hover:text-white">
+                Training
+              </Link>
+              <Link href="/experts" className="text-sm text-white/80 hover:text-white">
+                Experts
+              </Link>
+              <Link href="/clubs" className="text-sm text-white/80 hover:text-white">
+                Clubs
+              </Link>
             </nav>
+
+            {/* Right: auth-aware user actions (server component) */}
+            <div className="flex items-center">
+              <HeaderUser />
+            </div>
           </div>
         </header>
 

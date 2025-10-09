@@ -1,100 +1,88 @@
-// app/clubs/page.tsx
 import { prisma } from "@/lib/prisma";
-import Image from "next/image";
-import ClubGallery from "./ui/ClubGallery";
-import type { Metadata } from "next";
+import ClubCard from "../_components/ClubCard";
+import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "Clubs | FitnessHub",
-  description:
-    "Find running, cycling, and tri clubs near you. Train together, go farther.",
-};
+export const rdynamic = "force-dynamic"; 
 
 export default async function ClubsPage() {
   const clubs = await prisma.club.findMany({
-    orderBy: [{ memberCount: "desc" }, { name: "asc" }],
+    orderBy: [{ members: "desc" }, { name: "asc" }],
     select: {
-      id: true,
-      slug: true,
-      name: true,
-      city: true,
-      sports: true,
-      memberCount: true,
-      description: true,
-      logoUrl: true,
-      coverImage: true,
+      slug: true, name: true, city: true, sports: true, members: true,
+      description: true, logoUrl: true, coverImage: true,
     },
+    take: 36,
   });
-
-  // Figure out unique filters server-side to avoid client crunching
-  const cities = [...new Set(clubs.map((c) => c.city).filter(Boolean))].sort() as string[];
-  const sports = [...new Set(clubs.flatMap((c) => c.sports))].sort();
-
-  const featured = clubs.slice(0, 3);
 
   return (
     <main className="min-h-screen bg-[rgb(var(--brand-surface))]">
       {/* Hero */}
-      <section className="mx-auto max-w-7xl px-4 pt-10 md:pt-14">
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 via-white/[0.03] to-transparent p-6 md:p-10">
-          <div className="grid items-center gap-8 md:grid-cols-2">
+      <section className="relative border-b border-white/10">
+        <div className="absolute inset-0 -z-10
+            bg-[radial-gradient(900px_500px_at_-10%_-10%,rgba(99,91,255,.25),transparent_60%),radial-gradient(900px_500px_at_110%_10%,rgba(51,230,166,.18),transparent_60%)]" />
+        <div className="mx-auto max-w-7xl px-6 py-10">
+          <div className="flex items-center justify-between">
             <div>
-              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 backdrop-blur">
-                Train together
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80">
+                Community
               </span>
-              <h1 className="mt-4 text-4xl/tight font-extrabold text-white md:text-6xl/tight">
-                Clubs that keep you <span className="text-primary">consistent</span>
+              <h1 className="mt-3 text-3xl font-extrabold text-white md:text-4xl">
+                Clubs & groups
               </h1>
-              <p className="mt-4 max-w-xl text-white/70">
-                Find groups near you for long runs, weekend rides, skills clinics, and coffee after.
-                Join a crew and watch your fitness stick.
+              <p className="mt-1 text-sm text-white/70">
+                Find a local crew. Train together. Make it fun.
               </p>
             </div>
-
-            {/* Featured mosaic */}
-            <div className="grid grid-cols-3 gap-3">
-              {featured.map((f) => (
-                <div
-                  key={f.id}
-                  className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-white/5"
-                  title={f.name}
-                >
-                  <Image
-                    src={f.coverImage || "/placeholder.jpg"}
-                    alt={f.name}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width:768px) 50vw, 33vw"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                  <div className="absolute left-3 bottom-3 flex items-center gap-2">
-                    <div className="h-7 w-7 overflow-hidden rounded-full border border-white/20 bg-black/40">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        alt={`${f.name} logo`}
-                        src={f.logoUrl || "/placeholder.jpg"}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <p className="text-sm font-semibold text-white drop-shadow">{f.name}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Link
+              href="/events" // or a future /clubs/create
+              className="hidden rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 md:block"
+            >
+              Browse events →
+            </Link>
           </div>
-
-          <div className="pointer-events-none absolute -right-12 -top-12 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
         </div>
       </section>
 
-      {/* Directory */}
-      <section className="mx-auto max-w-7xl px-4 pb-16 pt-6">
-        <ClubGallery
-          initialClubs={clubs}
-          cities={cities}
-          sports={sports}
-        />
+      {/* Content */}
+      <section className="mx-auto max-w-7xl px-6 py-8">
+        {clubs.length === 0 ? (
+          <EmptyClubs />
+        ) : (
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {clubs.map((c) => (
+              <li key={c.slug}>
+                <ClubCard club={c} />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
+  );
+}
+
+function EmptyClubs() {
+  return (
+    <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.04] p-10 text-center">
+      <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-white/10" />
+      <h3 className="text-lg font-semibold text-white">No clubs yet</h3>
+      <p className="mt-1 text-sm text-white/70">
+        Seed a couple of clubs or add your first one to get started.
+      </p>
+      <div className="mt-4 flex items-center justify-center gap-2">
+        <Link
+          href="/events"
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10"
+        >
+          Explore events
+        </Link>
+        <a
+          href="mailto:hello@example.com"
+          className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Partner with us
+        </a>
+      </div>
+    </div>
   );
 }

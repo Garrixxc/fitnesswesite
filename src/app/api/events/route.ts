@@ -1,115 +1,94 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import slugify from "slugify";
+import { revalidatePath } from "next/cache";
 
-// limits (2MB)
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const MAX_PDF_BYTES = 2 * 1024 * 1024;
+const MAX_BYTES = 2 * 1024 * 1024;
+const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
+
+function toInt(v: string | null | undefined) {
+  if (!v) return null;
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseISOOrFail(s?: string | null, name = "date") {
+  if (!s) throw new Error(`${name} required`);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid ${name}`);
+  return d;
+}
 
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
 
-    // text fields
     const title = String(form.get("title") ?? "").trim();
     const sport = (String(form.get("sport") ?? "RUN").toUpperCase()) as
-      | "RUN"
-      | "CYCLING"
-      | "SWIM"
-      | "TRIATHLON"
-      | "TREK"
-      | "OTHER";
-    const distanceStr = String(form.get("distanceKm") ?? "").trim();
-    const startDateStr = String(form.get("startDate") ?? "").trim();
-    const endDateStr = String(form.get("endDate") ?? "").trim();
+      | "RUN" | "CYCLING" | "SWIM" | "TRIATHLON" | "TREK" | "OTHER";
     const location = String(form.get("location") ?? "").trim();
-    const addressJson = String(form.get("addressJson") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
-    const priceStr = String(form.get("price") ?? "0").trim();
-    const currency = String(form.get("currency") ?? "INR").trim();
-    const capacityStr = String(form.get("capacity") ?? "").trim();
+    const currency = (String(form.get("currency") ?? "INR").trim() || "INR").toUpperCase();
 
     if (title.length < 3) return NextResponse.json({ error: "Title too short" }, { status: 400 });
     if (description.length < 5) return NextResponse.json({ error: "Description too short" }, { status: 400 });
-    if (!startDateStr) return NextResponse.json({ error: "Start date required" }, { status: 400 });
 
-    // parse numbers
-    const distanceKm = distanceStr ? Number(distanceStr) : null;
-    const price = Number(priceStr || 0);
-    const capacity = capacityStr ? Number(capacityStr) : null;
+    const startDate = parseISOOrFail(String(form.get("startDate")), "start date");
+    const endDateStr = String(form.get("endDate") ?? "").trim();
+    const endDate = endDateStr ? parseISOOrFail(endDateStr, "end date") : null;
 
-    // handle files (optional)
+    const distanceKm = form.get("distanceKm") ? Number(String(form.get("distanceKm"))) : null;
+    const price = toInt(String(form.get("price"))) ?? 0;   // rupees
+    const capacity = toInt(String(form.get("capacity")));
+
+    // single file (optional)
     let coverImage: string | null = null;
-    let brochureUrl: string | null = null;
-
-    const cover = form.get("coverImage");
-    if (cover && cover instanceof File) {
-      if (!["image/jpeg", "image/png"].includes(cover.type)) {
-        return NextResponse.json({ error: "Cover must be JPG or PNG" }, { status: 400 });
+    const file = form.get("coverFile");
+    if (file instanceof File) {
+      if (!ALLOWED.has(file.type)) {
+        return NextResponse.json({ error: "File must be JPG/PNG/WEBP/PDF" }, { status: 400 });
       }
-      if (cover.size > MAX_IMAGE_BYTES) {
-        return NextResponse.json({ error: "Cover image too large (max 2MB)" }, { status: 400 });
+      if (file.size > MAX_BYTES) {
+        return NextResponse.json({ error: "File too large (max 2MB)" }, { status: 400 });
       }
-
-      // store in public/uploads/
-      const buf = Buffer.from(await cover.arrayBuffer());
-      const fileName = `${Date.now()}-${cover.name.replace(/\s+/g, "_")}`;
-      const filePath = `public/uploads/${fileName}`;
-      await import("fs/promises").then((fs) => fs.writeFile(filePath, buf));
-      coverImage = `/uploads/${fileName}`;
-    }
-
-    const brochure = form.get("brochureFile");
-    if (brochure && brochure instanceof File) {
-      if (brochure.type !== "application/pdf") {
-        return NextResponse.json({ error: "Brochure must be a PDF" }, { status: 400 });
-      }
-      if (brochure.size > MAX_PDF_BYTES) {
-        return NextResponse.json({ error: "Brochure too large (max 2MB)" }, { status: 400 });
-      }
-      const buf = Buffer.from(await brochure.arrayBuffer());
-      const fileName = `${Date.now()}-${brochure.name.replace(/\s+/g, "_")}`;
-      const filePath = `public/uploads/${fileName}`;
-      await import("fs/promises").then((fs) => fs.writeFile(filePath, buf));
-      brochureUrl = `/uploads/${fileName}`;
-    }
-
-    // pick an organizer (placeholder until auth)
-    const organizer =
-      (await prisma.user.findFirst({ where: { role: "ORGANIZER" } })) ??
-      (await prisma.user.findFirst());
-    if (!organizer) {
-      return NextResponse.json({ error: "No organizer user found. Seed an organizer first." }, { status: 400 });
+      const buf = Buffer.from(await file.arrayBuffer());
+      const safe = file.name.replace(/\s+/g, "_").replace(/[^\w.\-]/g, "");
+      const fname = `${Date.now()}-${safe}`;
+      const fs = await import("fs/promises");
+      await fs.mkdir("public/uploads", { recursive: true });
+      await fs.writeFile(`public/uploads/${fname}`, buf);
+      coverImage = `/uploads/${fname}`;
     }
 
     const slug =
-      slugify(title, { lower: true, strict: true }) +
-      "-" +
-      Math.random().toString(36).slice(2, 6);
+      `${slugify(title, { lower: true, strict: true })}-${Math.random().toString(36).slice(2, 6)}`;
 
-    const event = await prisma.event.create({
+    const created = await prisma.event.create({
       data: {
         title,
         slug,
         sport,
-        distanceKm,
-        startDate: new Date(startDateStr),
-        endDate: endDateStr ? new Date(endDateStr) : null,
+        distanceKm: Number.isFinite(distanceKm ?? NaN) ? distanceKm : null,
+        startDate,
+        endDate,
         location,
-        addressJson: addressJson ? (addressJson as any) : null,
         description,
-        coverImage,
-        brochureUrl,
-        organizerId: organizer.id,
         price,
-        currency: currency || "INR",
+        currency, // stays "INR"
         capacity,
+        coverImage,
+        organizerId: undefined, // optional
       },
+      select: { slug: true },
     });
 
-    return NextResponse.json({ ok: true, event }, { status: 201 });
-  } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ error: err?.message ?? "Failed to create event" }, { status: 400 });
+    revalidatePath("/events");
+    const loc = `/events/${created.slug}`;
+    return new NextResponse(JSON.stringify({ ok: true, slug: created.slug }), {
+      status: 201,
+      headers: { "Content-Type": "application/json", Location: loc },
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "Failed to create event" }, { status: 400 });
   }
 }
