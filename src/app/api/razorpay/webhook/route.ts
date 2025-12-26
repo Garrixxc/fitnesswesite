@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 // Stub implementation - Payment model not yet in schema
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   const rawBody = await req.text();
   const signature = req.headers.get("x-razorpay-signature") ?? "";

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 
 // Stub implementation - Payment model not yet in schema
 // Body: { refType: "EVENT"|"COACH"|"PLAN"|"CLUB"|"OTHER", refId: string, userId: string }
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

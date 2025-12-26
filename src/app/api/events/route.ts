@@ -19,6 +19,8 @@ function parseISOOrFail(s?: string | null, name = "date") {
   return d;
 }
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const form = await req.formData();

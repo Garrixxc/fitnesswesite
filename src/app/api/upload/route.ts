@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+// Stub import { writeFile } from "fs/promises";
+import { join } from "path";
 
 // Stub implementation - Supabase configuration required
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   console.log("[UPLOAD STUB] File upload pending Supabase configuration");
 

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getSessionUser, canManageEvent } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 // Shared select to keep payload small
 const EVENT_PUBLIC_SELECT = {
   id: true,
