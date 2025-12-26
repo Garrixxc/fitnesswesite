@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 type Search = {
   q?: string; sport?: string; city?: string;

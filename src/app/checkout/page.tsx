@@ -2,6 +2,8 @@
 import { prisma } from "@/lib/prisma";
 import CheckoutClient from "./ui/CheckoutClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function CheckoutPage({
   searchParams,
 }: {
