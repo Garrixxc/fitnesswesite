@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 
 // Stub implementation - EventForm component interface mismatch
+export const dynamic = "force-dynamic";
+
 export default async function EditEvent({ params }: { params: { slug: string } }) {
   const e = await prisma.event.findUnique({ where: { slug: params.slug } });
   if (!e) return notFound();

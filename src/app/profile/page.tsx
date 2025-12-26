@@ -5,7 +5,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import ProfileForm from "./ProfileForm";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
   const session = await auth();
