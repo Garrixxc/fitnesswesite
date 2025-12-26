@@ -1,4 +1,3 @@
-cat > .gitignore <<'EOF'
 # dependencies / builds / caches
 node_modules/
 .next/
@@ -21,7 +20,8 @@ npm-debug.log*
 *.local
 .DS_Store
 
-# prisma
-prisma/dev.db*
-prisma/dev.db-journal
-EOF
+# database
+*.db
+*.db-journal
+prisma/*.db
+prisma/*.db-journal
