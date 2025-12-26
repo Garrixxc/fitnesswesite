@@ -12,21 +12,21 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     title: "Race season, powered by you",
-    subtitle: "Find events, grab plans, and meet experts.",
-    image: "/banners/hero-run.jpg",        // ✅ you already have these
+    subtitle: "Find events and register today.",
+    image: "/banners/hero-run.jpg",
     href: "/events",
   },
   {
     title: "Tri season is here",
-    subtitle: "Train smarter with our plans.",
+    subtitle: "Train smarter with our plans. (Coming Soon)",
     image: "/banners/tri.jpg",
     href: "/training",
   },
   {
     title: "Courts near you",
-    subtitle: "Pickleball, football turfs, and more.",
+    subtitle: "Pickleball, football turfs, and more. (Coming Soon)",
     image: "/banners/pickleball.jpg",
-    href: "/arenas",
+    href: "/clubs",
   },
 ];
 

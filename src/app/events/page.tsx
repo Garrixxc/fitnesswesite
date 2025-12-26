@@ -28,9 +28,9 @@ export default async function EventsPage({ searchParams }: { searchParams?: Sear
   const sp = searchParams ?? {};
   const where: Prisma.EventWhereInput = {};
 
-  if (sp.q?.trim()) where.title = { contains: sp.q.trim(), mode: "insensitive" };
+  if (sp.q?.trim()) where.title = { contains: sp.q.trim() };
   if (sp.sport) where.sport = sp.sport as any;
-  if (sp.city?.trim()) where.location = { contains: sp.city.trim(), mode: "insensitive" };
+  if (sp.city?.trim()) where.location = { contains: sp.city.trim() };
 
   const from = parseDate(sp.from);
   const to = parseDate(sp.to);
@@ -108,7 +108,7 @@ export default async function EventsPage({ searchParams }: { searchParams?: Sear
             <div className="lg:col-span-3">
               <label className="block text-[11px] font-medium text-white/60">Search</label>
               <input name="q" defaultValue={sp.q ?? ""} placeholder="Event name, keyword…"
-                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-primary/40"/>
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-white/60">Sport</label>
@@ -120,28 +120,28 @@ export default async function EventsPage({ searchParams }: { searchParams?: Sear
             <div className="lg:col-span-2">
               <label className="block text-[11px] font-medium text-white/60">City</label>
               <input name="city" defaultValue={sp.city ?? ""} placeholder="e.g. Mumbai"
-                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-primary/40"/>
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-white/60">From</label>
               <input type="date" name="from" defaultValue={sp.from ?? ""}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40"/>
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-white/60">To</label>
               <input type="date" name="to" defaultValue={sp.to ?? ""}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40"/>
+                className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-medium text-white/60">Min ₹</label>
                 <input name="min" defaultValue={sp.min ?? ""} inputMode="numeric"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40"/>
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40" />
               </div>
               <div>
                 <label className="block text-[11px] font-medium text-white/60">Max ₹</label>
                 <input name="max" defaultValue={sp.max ?? ""} inputMode="numeric"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40"/>
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-primary/40" />
               </div>
             </div>
             <div className="flex items-end gap-2">
@@ -170,12 +170,12 @@ export default async function EventsPage({ searchParams }: { searchParams?: Sear
           {pages > 1 && (
             <nav className="flex items-center gap-2">
               <Link href={buildPageHref(Math.max(1, page - 1))}
-                    className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-1 text-white/80 hover:bg-white/10">
+                className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-1 text-white/80 hover:bg-white/10">
                 Prev
               </Link>
               <span className="text-white/70">Page <span className="text-white">{page}</span> / {pages}</span>
               <Link href={buildPageHref(Math.min(pages, page + 1))}
-                    className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-1 text-white/80 hover:bg-white/10">
+                className="rounded-md border border-white/10 bg-white/[0.06] px-2 py-1 text-white/80 hover:bg-white/10">
                 Next
               </Link>
             </nav>
@@ -223,7 +223,7 @@ function EventCard(props: {
       className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_15px_50px_-20px_rgba(0,0,0,0.6)] transition hover:-translate-y-0.5 hover:bg-white/[0.06]">
       <div className="relative aspect-[16/10]">
         <Image src={img} alt={props.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105"
-               sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 33vw"/>
+          sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 33vw" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
           <Chip>{props.location ?? "TBA"}</Chip>

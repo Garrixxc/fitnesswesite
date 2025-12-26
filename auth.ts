@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "database" },
+  session: { strategy: "jwt" },
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
@@ -20,14 +20,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(creds) {
-        if (!creds?.email || !creds?.password) return null;
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+
         const user = await prisma.user.findUnique({
-          where: { email: creds.email },
+          where: { email },
         });
-        if (!user?.passwordHash) return null;
-        const ok = await bcrypt.compare(creds.password, user.passwordHash);
-        return ok ? { id: user.id, email: user.email, name: user.name } : null;
+
+        if (!user || !user.passwordHash) return null;
+
+        const ok = await bcrypt.compare(password, user.passwordHash);
+        return ok ? { id: user.id, email: user.email, name: user.name, role: user.role } : null;
       },
     }),
   ],
@@ -35,11 +41,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/signin", // our custom page below
   },
   callbacks: {
-    async session({ session, user }) {
-      // attach our app's fields to the session
-      if (session.user) {
-        (session.user as any).id = user.id;
-        (session.user as any).role = (user as any).role;
+    async jwt({ token, user, trigger, session }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as any).role;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token) {
+        (session.user as any).id = token.id as string;
+        (session.user as any).role = token.role as string;
       }
       return session;
     },

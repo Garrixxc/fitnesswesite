@@ -32,53 +32,24 @@ function sportLabel(s: SportEnum) {
 export default async function SportHub({
   params,
 }: { params: { sport?: string } }) {
-  const slug = (params.sport ?? "").toLowerCase();
+  const slug = (params.sport ?? "").toLowerCase() as keyof typeof SPORT_SLUGS;
   const sport = SPORT_SLUGS[slug] as SportEnum | undefined;
   if (!sport) notFound();
 
   const now = new Date();
 
-  /* Parallel queries for sport hub */
-  const [events, plans, clubs, experts] = await Promise.all([
-    prisma.event.findMany({
-      where: { sport: sport as any, startDate: { gte: now } },
-      orderBy: { startDate: "asc" },
-      take: 8,
-      select: {
-        id: true, slug: true, title: true, coverImage: true,
-        startDate: true, endDate: true, location: true,
-        price: true, currency: true, sport: true,
-      },
-    }),
-    prisma.trainingPlan.findMany({
-      where: { sport: sport as any },
-      orderBy: [{ isPremium: "desc" }, { createdAt: "desc" }],
-      take: 6,
-      select: {
-        id: true, slug: true, title: true, level: true, weeks: true,
-        price: true, compareAt: true, isPremium: true, coverImage: true,
-        description: true,
-      },
-    }),
-    prisma.club.findMany({
-      where: { sports: { has: sport as any } },
-      orderBy: [{ members: "desc" }, { name: "asc" }],
-      take: 8,
-      select: {
-        slug: true, name: true, city: true, sports: true,
-        members: true, description: true, logoUrl: true, coverImage: true,
-      },
-    }),
-    prisma.expert.findMany({
-      where: { sports: { has: sport as any } },
-      orderBy: [{ rating: "desc" }],
-      take: 6,
-      select: {
-        slug: true, name: true, role: true, city: true,
-        sports: true, rating: true, rate: true,
-      },
-    }),
-  ]);
+  /* Queries */
+  const events = await prisma.event.findMany({
+    where: { sport: sport as any, startDate: { gte: now } },
+    orderBy: { startDate: "asc" },
+    take: 12,
+    select: {
+      id: true, slug: true, title: true, coverImage: true,
+      startDate: true, endDate: true, location: true,
+      price: true, currency: true, sport: true,
+      city: true,
+    },
+  });
 
   const label = sportLabel(sport);
 
@@ -97,14 +68,10 @@ export default async function SportHub({
                 {label} hub
               </h1>
               <p className="mt-2 max-w-2xl text-white/70">
-                Upcoming {label.toLowerCase()} events, popular clubs, coach marketplace,
-                and training plans — all in one place.
+                Discover upcoming {label.toLowerCase()} events.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <a href="#events" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Events</a>
-                <a href="#training" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Training</a>
-                <a href="#clubs" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Clubs</a>
-                <a href="#experts" className="rounded-xl bg-white/10 px-3 py-1.5 text-sm hover:bg-white/15">Experts</a>
               </div>
             </div>
             <Link
@@ -135,57 +102,6 @@ export default async function SportHub({
             primary={`Create ${label} event`}
             secondaryHref="/events"
             secondary="Browse events"
-          />
-        )}
-
-        {/* Training */}
-        <SectionHeader id="training" title={`${label} training plans`} href="/training" cta="All plans" className="mt-12" />
-        {plans.length ? (
-          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {plans.map((p) => (
-              <li key={p.id}><PlanCard p={p} /></li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyCard
-            title="No plans yet"
-            subtitle={`We don’t have ${label.toLowerCase()} plans here yet.`}
-            secondaryHref="/training"
-            secondary="Explore training"
-          />
-        )}
-
-        {/* Clubs */}
-        <SectionHeader id="clubs" title={`${label} clubs & groups`} href="/clubs" cta="All clubs" className="mt-12" />
-        {clubs.length ? (
-          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {clubs.map((c) => (
-              <li key={c.slug}><ClubCard c={c} /></li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyCard
-            title="No clubs yet"
-            subtitle={`We couldn’t find ${label.toLowerCase()} clubs.`}
-            secondaryHref="/clubs"
-            secondary="Browse clubs"
-          />
-        )}
-
-        {/* Experts */}
-        <SectionHeader id="experts" title={`${label} coaches & experts`} href="/experts" cta="All experts" className="mt-12" />
-        {experts.length ? (
-          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {experts.map((x) => (
-              <li key={x.slug}><ExpertCard x={x} /></li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyCard
-            title="No experts yet"
-            subtitle={`Hire coaches, physios and nutritionists for ${label.toLowerCase()}.`}
-            secondaryHref="/experts"
-            secondary="Browse experts"
           />
         )}
 
@@ -244,6 +160,7 @@ function EventCard({ e }: {
     slug: string; title: string; coverImage?: string | null;
     startDate: Date; endDate?: Date | null; location?: string | null;
     price: number; currency: string; sport: string;
+    city?: string | null;
   }
 }) {
   const img = e.coverImage && e.coverImage.trim() !== "" ? e.coverImage : "/placeholder.jpg";
@@ -270,117 +187,6 @@ function EventCard({ e }: {
         <h3 className="line-clamp-2 font-semibold">{e.title}</h3>
         <p className="mt-1 text-sm text-white/70">{date}</p>
       </div>
-    </Link>
-  );
-}
-
-/* Plan card */
-function PlanCard({ p }: {
-  p: {
-    slug: string; title: string; level: string; weeks: number;
-    price: number; compareAt?: number | null; isPremium: boolean;
-    coverImage?: string | null; description?: string | null;
-  }
-}) {
-  const img = p.coverImage && p.coverImage.trim() !== "" ? p.coverImage : "/placeholder.jpg";
-  return (
-    <Link
-      href={`/training/${p.slug}`}
-      className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
-    >
-      <div className="relative aspect-[16/10]">
-        <Image src={img} alt={p.title} fill className="object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
-        <div className="absolute left-3 top-3 flex gap-2">
-          <Chip>{p.level}</Chip>
-          <Chip>{p.weeks}w</Chip>
-          {p.isPremium && <Chip>Premium</Chip>}
-        </div>
-        <div className="absolute bottom-3 right-3">
-          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-ink">
-            ₹ {formatMoney(p.price)}
-          </span>
-        </div>
-      </div>
-      <div className="p-4">
-        <h3 className="line-clamp-2 font-semibold">{p.title}</h3>
-        <p className="mt-1 line-clamp-2 text-sm text-white/70">
-          {p.description ?? "—"}
-        </p>
-      </div>
-    </Link>
-  );
-}
-
-/* Club card */
-function ClubCard({ c }: {
-  c: {
-    slug: string; name: string; city?: string | null; sports: string[];
-    members?: number | null; description?: string | null;
-    logoUrl?: string | null; coverImage?: string | null;
-  }
-}) {
-  const img = c.coverImage && c.coverImage.trim() !== "" ? c.coverImage : "/placeholder.jpg";
-  return (
-    <Link
-      href={`/clubs/${c.slug}`}
-      className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
-    >
-      <div className="relative aspect-[16/9]">
-        <Image src={img} alt={c.name} fill className="object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-        <div className="absolute left-3 top-3 flex gap-2">
-          {c.city && <Chip>{c.city}</Chip>}
-          {c.sports?.slice(0, 2).map((s) => <Chip key={s}>{s}</Chip>)}
-        </div>
-      </div>
-      <div className="p-4">
-        <div className="flex items-center justify-between">
-          <h3 className="line-clamp-1 font-semibold">{c.name}</h3>
-          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-ink">
-            {c.members ?? 0}
-          </span>
-        </div>
-        <p className="mt-1 line-clamp-2 text-sm text-white/70">{c.description ?? "—"}</p>
-      </div>
-    </Link>
-  );
-}
-
-/* Expert card */
-function ExpertCard({ x }: {
-  x: {
-    slug: string; name: string; role: string; city?: string | null;
-    sports: string[]; rating?: number | null; rate?: number | null;
-  }
-}) {
-  return (
-    <Link
-      href={`/experts/${x.slug}`}
-      className="group block rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:-translate-y-0.5 hover:bg-white/[0.06]"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold">{x.name}</h3>
-          <p className="text-sm text-white/70">
-            {x.role} {x.city ? `• ${x.city}` : ""}
-          </p>
-        </div>
-        {typeof x.rating === "number" && (
-          <span className="rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-ink">
-            ★ {x.rating.toFixed(1)}
-          </span>
-        )}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {x.sports.slice(0, 3).map((s) => <Chip key={s}>{s}</Chip>)}
-      </div>
-      {typeof x.rate === "number" && (
-        <div className="mt-3 text-sm text-white/80">from ₹ {formatMoney(x.rate)}</div>
-      )}
-      <span className="mt-2 inline-block text-sm text-primary/90 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        View profile →
-      </span>
     </Link>
   );
 }

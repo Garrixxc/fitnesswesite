@@ -30,20 +30,9 @@ export default async function CheckoutPage({
     title = ev.title;
     price = ev.price ?? 0;
     image = ev.coverImage ?? null;
-  } else if (refType === "PLAN") {
-    const p = await prisma.trainingPlan.findUnique({ where: { id: refId } });
-    if (!p) return <div className="p-6 text-white/80">Plan not found.</div>;
-    title = p.title;
-    price = p.price ?? 0;
-    image = p.coverImage ?? null;
-  } else if (refType === "COACH") {
-    const c = await prisma.coach.findUnique({ where: { id: refId } });
-    if (!c) return <div className="p-6 text-white/80">Coach not found.</div>;
-    title = `${c.name} — 1 month coaching`;
-    price = c.monthlyRate ?? 0;
-    image = c.photoUrl ?? null;
   } else {
-    title = "Generic payment";
+    // Default / Stub
+    title = "Generic Payment";
     price = 10; // fallback
   }
 

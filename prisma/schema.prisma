@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 // ---------- Enums ----------
@@ -13,7 +13,6 @@ enum Role {
   USER
   ADMIN
   ORGANIZER
-  COACH
 }
 
 enum Sport {
@@ -33,81 +32,32 @@ enum RegStatus {
   WAITLISTED
 }
 
-enum Level {
-  BEGINNER
-  INTERMEDIATE
-  ADVANCED
-}
-
-enum SubStatus {
-  ACTIVE
-  TRIALING
-  PAST_DUE
-  CANCELED
-  INCOMPLETE
-}
-
-enum ExpertRole {
-  COACH
-  PHYSIO
-  NUTRITION
-}
-
-// ---- Profile enums (kept) ----
-enum BloodGroup {
-  A_POS
-  A_NEG
-  B_POS
-  B_NEG
-  O_POS
-  O_NEG
-  AB_POS
-  AB_NEG
-  UNKNOWN
-}
-
-enum TshirtSize {
-  XS
-  S
-  M
-  L
-  XL
-  XXL
-}
-
-enum IdProofType {
-  AADHAAR
-  PAN
-  DRIVING_LICENSE
-  PASSPORT
-  OTHER
-}
-
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
-  NA
-}
-
+// ---------- Core models ----------
 // ---------- Core models ----------
 model User {
-  id       String  @id @default(cuid())
-  email    String  @unique
-  name     String?
-  image    String?
-  role     Role    @default(USER)
-  points   Int     @default(0)   // cached from PointsLedger
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  role         Role     @default(USER)
+  passwordHash String?
+
+  // Profile fields (migrated from AthleteProfile)
+  phone           String?
+  city            String?
+  state           String?
+  country         String?
+  gender          String? // simplified from enum for V1
+  dob             DateTime?
+  tshirtSize      String?
+  bloodGroup      String?
+  emergencyName   String?
+  emergencyPhone  String?
+  medicalNotes    String?
 
   // Relations
-  athleteProfile AthleteProfile?
-  organized      Event[]         @relation("OrganizerEvents")
-  registrations  Registration[]
-  reviews        Review[]
-  subscriptions  Subscription[]
-  coachProfile   Coach?          @relation("CoachUser")
-  clubsOwned     Club[]          @relation("ClubOwner")
-  PointsLedger   PointsLedger[]
+  organized     Event[]        @relation("OrganizerEvents")
+  registrations Registration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -125,16 +75,16 @@ model Event {
   startDate   DateTime
   endDate     DateTime?
   location    String
+  city        String?
   coverImage  String?
   currency    String    @default("INR")
   price       Int       @default(0)
   capacity    Int?
 
   organizerId String?
-  organizer   User?     @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  organizer   User?   @relation("OrganizerEvents", fields: [organizerId], references: [id])
 
   registrations Registration[]
-  reviews       Review[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -142,6 +92,7 @@ model Event {
   @@index([sport, startDate])
   @@index([location])
   @@index([organizerId])
+  @@index([city, sport])
 }
 
 model Registration {
@@ -160,179 +111,4 @@ model Registration {
 
   @@unique([userId, eventId])
   @@index([status])
-}
-
-model Review {
-  id      String  @id @default(cuid())
-  userId  String
-  eventId String
-  rating  Int
-  comment String?
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, eventId])
-  @@index([eventId])
-}
-
-model TrainingPlan {
-  id          String  @id @default(cuid())
-  slug        String  @unique
-  title       String
-  sport       Sport
-  level       Level
-  weeks       Int
-  description String?
-
-  // Pricing & presentation
-  price      Int     @default(0)  // rupees
-  compareAt  Int?
-  isPremium  Boolean @default(false)
-  coverImage String?
-
-  workouts Workout[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Workout {
-  id          String  @id @default(cuid())
-  planId      String
-  week        Int
-  day         Int
-  title       String
-  details     String?
-  durationMin Int?
-  distanceKm  Float?
-
-  plan TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  @@index([planId, week, day])
-}
-
-model Subscription {
-  id               String    @id @default(cuid())
-  userId           String
-  provider         String?
-  providerSubId    String?   @unique
-  status           SubStatus @default(ACTIVE)
-  currentPeriodEnd DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status])
-}
-
-model AthleteProfile {
-  userId  String    @id
-
-  // Demographics
-  dob     DateTime?
-  city    String?
-  state   String?
-  country String?
-  gender  Gender?   @default(NA)
-
-  // Contact & emergency
-  phone           String?
-  phoneVerifiedAt DateTime?
-  bloodGroup      BloodGroup? @default(UNKNOWN)
-  emergencyName   String?
-  emergencyPhone  String?
-  tshirtSize      TshirtSize? @default(M)
-
-  medicalNotes String?
-
-  // ---- ID proof (file-based, replaces Aadhaar OTP/KYC) ----
-  idProofType       String?      // e.g., "PASSPORT", "AADHAAR", "DRIVING_LICENSE"
-  idProofFilePath   String?      // private file path (never public)
-  idProofVerifiedAt DateTime?    // set by admin/organizer after manual verification
-
-  // Consents
-  termsAcceptedAt  DateTime?
-  medicalConsentAt DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([city])
-}
-
-model Coach {
-  id             String  @id @default(cuid())
-  slug           String  @unique
-  name           String
-  city           String
-  sports         Sport[]
-  bio            String?
-  certifications String?
-  rating         Float?
-  rate           Int?
-
-  userId String? @unique
-  user   User?   @relation("CoachUser", fields: [userId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([city])
-}
-
-model Club {
-  id          String  @id @default(cuid())
-  slug        String  @unique
-  name        String
-  city        String
-  sports      Sport[]
-  description String?
-  members     Int?
-  logoUrl     String?
-  coverImage  String?
-
-  ownerId String?
-  owner   User?   @relation("ClubOwner", fields: [ownerId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([city])
-}
-
-model Expert {
-  id     String     @id @default(cuid())
-  slug   String     @unique
-  role   ExpertRole
-  name   String
-  city   String
-  sports Sport[]
-  bio    String?
-  rating Float?
-  rate   Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([role])
-  @@index([city])
-}
-
-// ---------- Gamification ----------
-model PointsLedger {
-  id        String   @id @default(cuid())
-  userId    String
-  delta     Int
-  reason    String
-  meta      Json?
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
 }
